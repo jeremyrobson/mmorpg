@@ -39,28 +39,19 @@ function create_map(width, height) {
         }
     }
     
-    /*
-    for (var i=0;i<200;i++) {
-        var npc = create_npc("hostile");
-        var qx = npc.get_quad_x();
-        var qy = npc.get_quad_y();   
-        quad[qx][qy].push(npc);
-    }
-    */
-    
-    var npc = create_npc("hostile", 5, 5);
-    quad[0][0].push(npc);
-    
-    var get_chars = function(x, y, min, max, exclude) { //do not include self
+    var get_units = function(units, x, y, min, max, index) { //do not include own index?
         var qx = Math.floor(x / QUAD_SIZE);
         var qy = Math.floor(y / QUAD_SIZE);
-        var charlist = [];
+        var unitindices = [];
         for (var i=min;i<=max;i++) {
             for (var j=min;j<=max;j++) {
-                charlist = charlist.concat(quad[wrap(qx+i,16)][wrap(qy+j,16)]);
+                unitindices = unitindices.concat(quad[wrap(qx+i,16)][wrap(qy+j,16)]);
             }
         }
-        return charlist;
+        var unitlist = unitindeces.map(function(i) {
+            return units[i];
+        });
+        return unitlist;
     };
 
     var npc_for_each = function(fn) {
@@ -71,12 +62,18 @@ function create_map(width, height) {
         }
     };
     
-    var update_quad = function(unit) {
-        var qx = Math.floor(unit.get_x() / QUAD_SIZE);
-        var qy = Math.floor(unit.get_y() / QUAD_SIZE);
-        
-        
-        
+    var add = function(index, x, y) {
+        var qx = Math.floor(x / QUAD_SIZE);
+        var qy = Math.floor(y / QUAD_SIZE);
+        quad[qx][qy].push(index);
+    };
+    
+    var remove = function(index, x, y) {
+        var qx = Math.floor(x / QUAD_SIZE);
+        var qy = Math.floor(y / QUAD_SIZE);
+        quad[qx][qy] = quad[qx][qy].filter(function(a) {
+            return a != index;
+        });
     };
     
     return {
@@ -90,11 +87,14 @@ function create_map(width, height) {
 }
 
 function create_npc(ai, x, y) {
-    //var id = randint(10000,1000000);
+    var index = -1;
+    var id = randint(10000, 1000000);
     var mapx = x || randint(0, MAP_WIDTH);
     var mapy = y || randint(0, MAP_HEIGHT);
-    var qx = Math.floor(mapx / QUAD_SIZE);
-    var qy = Math.floor(mapy / QUAD_SIZE);
+    var quadx = Math.floor(mapx / QUAD_SIZE);
+    var quady = Math.floor(mapy / QUAD_SIZE);
+    var oldquadx = -1;
+    var oldquady = -1;
     var color = "rgb(255,0,0)";
     var hp = 100;
     var agl = randint(3,20);
@@ -104,26 +104,31 @@ function create_npc(ai, x, y) {
     var move = function(map, x, y) {
         mapx = wrap(mapx + x, MAP_WIDTH);
         mapy = wrap(mapy + y, MAP_HEIGHT);
-        
         var newquadx = Math.floor(mapx / QUAD_SIZE);
         var newquady = Math.floor(mapy / QUAD_SIZE);
         
-        if (newquadx != qx || newquady != qy) {
-            map.remove
+        if (newquadx != quadx || newquady != quady) {
+            oldquadx = quadx;
+            oldquady = quady;
+            quadx = newquadx;
+            quady = newquady;
+            map.add(index, newquadx, newquady);
+            map.remove(index, oldquadx, oldquady);
         }
     };
     
-    var turn = function(users, map) {
+    var turn = function(units, map) {
         at = at + agl;
         if (at >= 2000) {
             /** possible bottleneck!! **/
-            var chars = users.concat(map.get_chars(mapx, mapy, 0, 0));
         
-            var distances = chars.map(function(c) {
-                var x = c.get_x() - mapx;
-                var y = c.get_y() - mapy;
+            var distances = units.filter(function(u) {
+                return u.get_ai() != ai;
+            }).units.map(function(u) {
+                var x = u.get_x() - mapx;
+                var y = u.get_y() - mapy;
                 var distance = Math.sqrt(x * x + y * y);
-                return {unit:c, distance:distance};
+                return {unit:u, distance:distance};
             });
             
             var closest = distances.sort(function(a, b) {
@@ -144,8 +149,10 @@ function create_npc(ai, x, y) {
     };
     
     return {
-        ai: ai,
+        get_ai: function() { return ai; },
         color: color,
+        add: add,
+        remove: remove,
         get_x: function() { return mapx; },
         get_y: function() { return mapy; },
         get_quad_x: function() { return Math.floor(mapx / QUAD_SIZE); },
@@ -157,10 +164,20 @@ function create_npc(ai, x, y) {
 }
 
 function create_user(client) {
+    var index = -1;
+    var id = randint(10000, 1000000);
+    var ai = "user";
     var mapx = 0;
     var mapy = 0;
-    var quadx = 0;
-    var quady = 0;
+    var quadx = Math.floor(mapx / QUAD_SIZE);
+    var quady = Math.floor(mapy / QUAD_SIZE);
+    var oldquadx = -1;
+    var oldquady = -1;
+    var color = "rgb(255,0,0)";
+    var hp = 100;
+    var agl = randint(3,20);
+    var at = 0;
+    var target = null;
     
     var send_message = function(type, data) {
         client.send({"type":type, "data":data}); //use JSON.stringify(data)
@@ -173,14 +190,17 @@ function create_user(client) {
         var newquady = Math.floor(mapy / QUAD_SIZE);
         
         if (newquadx != quadx || newquady != quady) {
+            oldquadx = quadx;
+            oldquady = quady;
             quadx = newquadx;
             quady = newquady;
-            send_message("charupdate", map.get_chars(mapx, mapy, -1, 1));
-        }
-        
+            map.add(index, newquadx, newquady);
+            map.remove(index, oldquadx, oldquady);
+        } 
     };
     
     return {
+        get_ai: function() { return ai; },
         move: move,
         get_x: function() { return mapx; },
         get_y: function() { return mapy; },
@@ -191,36 +211,48 @@ function create_user(client) {
 
 function create_server(client) {
     var map = create_map(MAP_WIDTH, MAP_HEIGHT);
-    var users = [];
+    var units = [];
     var user;
+
+    var add = function(unit) {
+        unit.index = units.push(unit) - 1;
+        map.add(unit.index);
+    };
     
     var loop = function() {
         if (user)
             user.send_message("move", [user.get_x(), user.get_y()]);
         
         map.npc_for_each(function(npc) {
-            npc.turn(users, map);
+            npc.turn(units, map);
         });
     };
     
-    var get_chars = function(x, y, min, max) {
-        var chars = [];
-        chars = users.concat(map.get_chars(user.get_x(), user.get_y(), min, max));
-        return chars;
-    };
-    
-    var on_message = function(message) { //todo: arg also contains user
+    var on_message = function(message) { //todo: arg also contains which user
         if (message.type == "connect") {
             user = create_user(message.data);
+            add(user);
             user.send_message("sysmessage", "connection successful!");
-            user.send_message("charupdate", map.get_chars(user.get_x(), user.get_y(), -1, 1));
-            users.push(user);
+            user.send_message("unitupdate", map.get_units(units, user.get_x(), user.get_y(), -1, 1, user.index));
         }
     
         if (message.type == "move") {
             user.move(map, message.data[0], message.data[1]);
+            user.send_message("unitupdate", map.get_units(units, user.get_x(), user.get_y(), -1, 1, user.index));
         }
     };
+    
+    /*
+    for (var i=0;i<200;i++) {
+        var npc = create_npc("hostile");
+        var qx = npc.get_quad_x();
+        var qy = npc.get_quad_y();   
+        npc.index = units.push(npc);
+    }
+    */
+    
+    var npc = create_npc("hostile", 5, 5);
+    add(npc);
     
     return {
         loop: loop,
