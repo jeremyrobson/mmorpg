@@ -39,7 +39,7 @@ function create_map(width, height) {
         }
     }
     
-    var get_units = function(units, x, y, min, max, index) { //do not include own index?
+    var get_quad = function(x, y, min, max) {
         var qx = Math.floor(x / QUAD_SIZE);
         var qy = Math.floor(y / QUAD_SIZE);
         var unitindices = [];
@@ -48,10 +48,7 @@ function create_map(width, height) {
                 unitindices = unitindices.concat(quad[wrap(qx+i,16)][wrap(qy+j,16)]);
             }
         }
-        var unitlist = unitindeces.map(function(i) {
-            return units[i];
-        });
-        return unitlist;
+        return unitindices;
     };
 
     var npc_for_each = function(fn) {
@@ -80,8 +77,7 @@ function create_map(width, height) {
         width: width,
         height: height,
         tile: tile,
-        quad: quad,
-        get_chars: get_chars,
+        get_quad: get_quad
         npc_for_each: npc_for_each
     };
 }
@@ -228,17 +224,27 @@ function create_server(client) {
         });
     };
     
+    var update_units = function(unit) {
+        //limit to only when unit's quad changes
+        //if (unit.quadchanged) {
+        var unitlist = map.get_quad(unit.get_x(), unit.get_y(), -1, 1).map(function(i) {
+            return units[i];
+        });
+        unit.send_message("unitpdate", get_units(unit.get_x(), unit.get_y(), -1, 1));
+        //}
+    };
+    
     var on_message = function(message) { //todo: arg also contains which user
         if (message.type == "connect") {
             user = create_user(message.data);
             add(user);
             user.send_message("sysmessage", "connection successful!");
-            user.send_message("unitupdate", map.get_units(units, user.get_x(), user.get_y(), -1, 1, user.index));
+            update_units(user);
         }
     
         if (message.type == "move") {
             user.move(map, message.data[0], message.data[1]);
-            user.send_message("unitupdate", map.get_units(units, user.get_x(), user.get_y(), -1, 1, user.index));
+            update_units(user);
         }
     };
     
