@@ -3,15 +3,12 @@
 <script src="server.js"></script>
 <script src="client.js"></script>
 <script>
-
 function wrap(num, max) {
     if (num < 0) return max + num;
     if (num >= max) return num - max;
     return num;
 }
-
 var canvas, context, interval;
-
 window.onload = function() {
     canvas = document.getElementById("canvas");
     context = canvas.getContext("2d");
