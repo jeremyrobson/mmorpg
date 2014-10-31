@@ -26,7 +26,7 @@ function create_client(server) {
     var mapx = 0;
     var mapy = 0;
     var range = 5;
-    var chars = [];
+    var units = [];
     var target = null;
     var bullets = [];
     
@@ -44,9 +44,8 @@ function create_client(server) {
             mapy = message.data[1];
         }
         
-        if (message.type == "charupdate") {
-            chars = message.data;
-            console.log(chars);
+        if (message.type == "unitupdate") {
+            units = message.data;
         }
     };
 
@@ -72,17 +71,18 @@ function create_client(server) {
         tileX = wrap(mapx + cursorX - 7, MAP_WIDTH);
         tileY = wrap(mapy + cursorY - 7, MAP_HEIGHT);
         
-        var selected = chars.filter(function(c) {
-            return c.get_x() == tileX && c.get_y() == tileY;
+        var selected = units.filter(function(u) {
+            return u.get_x() == tileX && u.get_y() == tileY;
         })[0];
+
         if (selected) {
             target = selected;
             console.log(target.to_string());
         }
     };
     
-    var get_draw_x = function(c) { return wrap(c.get_x() - mapx + 7, MAP_WIDTH) };
-    var get_draw_y = function(c) { return wrap(c.get_y() - mapy + 7, MAP_HEIGHT) };
+    var get_draw_x = function(u) { return wrap(u.get_x() - mapx + 7, MAP_WIDTH) };
+    var get_draw_y = function(u) { return wrap(u.get_y() - mapy + 7, MAP_HEIGHT) };
     
     var draw = function() {
         context.fillStyle = "rgb(100,150,225)";
@@ -101,12 +101,12 @@ function create_client(server) {
             context.fillRect(get_draw_x(target)*32, get_draw_y(target)*24, 32, 24);
         }
         
-        chars.forEach(function(c) {
-            var dx = get_draw_x(c);
-            var dy = get_draw_y(c);
+        units.forEach(function(u) {
+            var dx = get_draw_x(u);
+            var dy = get_draw_y(u);
             
             if (dx >= 0 && dy >= 0 && dx < 16 && dy <= 16) {
-                context.fillStyle = c.color;
+                context.fillStyle = u.color;
                 context.fillRect(dx*32+4,dy*24-24,24,32);
             }
         });
