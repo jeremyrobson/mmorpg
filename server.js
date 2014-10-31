@@ -59,25 +59,23 @@ function create_map(width, height) {
         }
     };
     
-    var add = function(index, x, y) {
-        var qx = Math.floor(x / QUAD_SIZE);
-        var qy = Math.floor(y / QUAD_SIZE);
+    var add = function(index, qx, qy) {
         quad[qx][qy].push(index);
     };
     
-    var remove = function(index, x, y) {
-        var qx = Math.floor(x / QUAD_SIZE);
-        var qy = Math.floor(y / QUAD_SIZE);
+    var remove = function(index, qx, qy) {
         quad[qx][qy] = quad[qx][qy].filter(function(a) {
             return a != index;
         });
     };
     
     return {
+        add: add,
+        remove: remove,
         width: width,
         height: height,
         tile: tile,
-        get_quad: get_quad
+        get_quad: get_quad,
         npc_for_each: npc_for_each
     };
 }
@@ -94,7 +92,7 @@ function create_npc(ai, x, y) {
     var color = "rgb(255,0,0)";
     var hp = 100;
     var agl = randint(3,20);
-    var at = 0;
+    var at = 0;  //todo: change at to tickcount, less calculations
     var target = null;
     
     var move = function(map, x, y) {
@@ -115,12 +113,12 @@ function create_npc(ai, x, y) {
     
     var turn = function(units, map) {
         at = at + agl;
-        if (at >= 2000) {
+        if (at >= 200) {
             /** possible bottleneck!! **/
         
             var distances = units.filter(function(u) {
                 return u.get_ai() != ai;
-            }).units.map(function(u) {
+            }).map(function(u) {
                 var x = u.get_x() - mapx;
                 var y = u.get_y() - mapy;
                 var distance = Math.sqrt(x * x + y * y);
@@ -132,10 +130,20 @@ function create_npc(ai, x, y) {
             })[0];
             
             if (closest) target = closest.unit;
-        
-            console.log(distances, closest, target);
-        
-            move(map, randint(-1,2), randint(-1,2)); //todo: move towards target
+            
+            var xmove = randint(-1,2);
+            var ymove = randint(-1,2);
+            
+            if (target) {
+                var angle = Math.atan2(mapx - target.get_x(), mapy - target.get_y());
+                console.log(angle);
+                ymove = -Math.round(Math.cos(angle));
+                xmove = -Math.round(Math.sin(angle));
+            }
+            
+            console.log(xmove, ymove);
+            
+            move(map, xmove, ymove);
             at = 0;
         }
     };
@@ -146,9 +154,8 @@ function create_npc(ai, x, y) {
     
     return {
         get_ai: function() { return ai; },
+        get_index: function() { return index; },
         color: color,
-        add: add,
-        remove: remove,
         get_x: function() { return mapx; },
         get_y: function() { return mapy; },
         get_quad_x: function() { return Math.floor(mapx / QUAD_SIZE); },
@@ -163,6 +170,7 @@ function create_user(client) {
     var index = -1;
     var id = randint(10000, 1000000);
     var ai = "user";
+    var NAME = "User";
     var mapx = 0;
     var mapy = 0;
     var quadx = Math.floor(mapx / QUAD_SIZE);
@@ -196,7 +204,9 @@ function create_user(client) {
     };
     
     return {
+        NAME: NAME,
         get_ai: function() { return ai; },
+        get_index: function() { return index; },
         move: move,
         get_x: function() { return mapx; },
         get_y: function() { return mapy; },
@@ -212,25 +222,32 @@ function create_server(client) {
 
     var add = function(unit) {
         unit.index = units.push(unit) - 1;
-        map.add(unit.index);
+        unit.move(map, unit.get_x(), unit.get_y());
     };
     
     var loop = function() {
-        if (user)
+        if (user) {
             user.send_message("move", [user.get_x(), user.get_y()]);
+            update_units(user);
+        }
         
-        map.npc_for_each(function(npc) {
-            npc.turn(units, map);
+        units.filter(function(u) {
+            return u.get_ai() == "hostile";
+        }).forEach(function(u) {
+            u.turn(units, map);
         });
     };
     
     var update_units = function(unit) {
         //limit to only when unit's quad changes
         //if (unit.quadchanged) {
-        var unitlist = map.get_quad(unit.get_x(), unit.get_y(), -1, 1).map(function(i) {
-            return units[i];
-        });
-        unit.send_message("unitpdate", get_units(unit.get_x(), unit.get_y(), -1, 1));
+        //var unitlist = map.get_quad(unit.get_x(), unit.get_y(), -1, 1).map(function(i) {
+        //    return units[i];
+        //});
+        //.filter(function(u) {
+        //    return u.get_index() != unit.get_index();
+        //});;
+        unit.send_message("unitupdate", units);
         //}
     };
     
@@ -239,12 +256,10 @@ function create_server(client) {
             user = create_user(message.data);
             add(user);
             user.send_message("sysmessage", "connection successful!");
-            update_units(user);
         }
     
         if (message.type == "move") {
             user.move(map, message.data[0], message.data[1]);
-            update_units(user);
         }
     };
     
