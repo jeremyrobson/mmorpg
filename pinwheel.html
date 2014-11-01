@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+<head>
+<script>
+//example of pinwheel navigation
+
+var colors = [
+    "red",
+    "orange",
+    "yellow",
+    "green",
+    "blue",
+    "cyan",
+    "violet",
+    "magenta"
+];
+
+window.onload = function() {
+    canvas = document.getElementById("canvas");
+    context = canvas.getContext("2d");
+    canvas.onmousedown = function(e) {
+        var mx = e.offsetX;
+        var my = e.offsetY;
+        var angle = Math.atan2(my-240,mx-320);
+        var i = (Math.floor((angle*4+Math.PI/2)/Math.PI)+4)&7; //use AND 7 to wrap around
+        console.log(colors[i]);
+    };
+    
+    for (var x=0;x<320;x++) {
+        for (y=0;y<240;y++) {
+            var angle = Math.atan2(y-120, x-160);
+            var i = (Math.floor((angle*4+Math.PI/2)/Math.PI)+4)&7; //use AND 7 to wrap around
+            
+            context.fillStyle = colors[i];
+            context.fillRect(x*2,y*2,2,2);
+        }
+    }
+    
+};
+</script>
+</head>
+<body>
+<canvas width="640" height="480" id="canvas"></canvas>
+</body>
+</html>
