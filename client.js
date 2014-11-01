@@ -61,9 +61,8 @@ function create_client(server) {
     
     var mouse_down = function(x, y) {
         var angle = Math.atan2(y-180, x-240);
-        var movex = Math.round(Math.cos(angle));
-        var movey = Math.round(Math.sin(angle));
-        server.send({"type": "move", "data": [movex, movey]});
+        var direction = (Math.floor((angle*4+Math.PI/2)/Math.PI)+4)&7; //pinwheel navigation
+        server.send({"type": "move", "data": direction});
         
         cursorX = Math.floor(x/32);
         cursorY = Math.floor(y/24);
