@@ -1,3 +1,14 @@
+var pathtable = [
+    [-1,0], //w
+    [-1,-1], //nw
+    [0,-1], //n
+    [1,-1], //ne
+    [1,0], //e
+    [1,1], //se
+    [0,1], //s
+    [-1,1] //sw
+];
+
 var tiletemplates = [
     {
         "name": "water",
@@ -59,6 +70,28 @@ function create_map(width, height) {
         }
     };
     
+    var get_path = function(x, y, direction) {
+        //try moving in three directions according to pinwheel navigation
+        var m = {"x":wrap(x+pathtable[direction][0],width),"y":wrap(y+pathtable[direction][1],height)};
+
+        if (tile[m.x][m.y].blocked) {
+            m.x = wrap(x+pathtable[(direction+1)&7][0],width);
+            m.y = wrap(y+pathtable[(direction+1)&7][1],height);
+        }
+        
+        if (tile[m.x][m.y].blocked) {
+            m.x = wrap(x+pathtable[(direction-1)&7][0],width);
+            m.y = wrap(y+pathtable[(direction-1)&7][1],height);
+        }
+        
+        if (tile[m.x][m.y].blocked) {
+            m.x = x;
+            m.y = y;
+        }
+        
+        return m; //todo: change to return direction unit vector, not position!
+    };
+    
     var add = function(index, qx, qy) {
         quad[qx][qy].push(index);
     };
@@ -72,6 +105,7 @@ function create_map(width, height) {
     return {
         add: add,
         remove: remove,
+        get_path: get_path,
         width: width,
         height: height,
         tile: tile,
@@ -83,6 +117,7 @@ function create_map(width, height) {
 function create_npc(ai, x, y) {
     var index = -1;
     var id = randint(10000, 1000000);
+    var NAME = "NPC";
     var mapx = x || randint(0, MAP_WIDTH);
     var mapy = y || randint(0, MAP_HEIGHT);
     var quadx = Math.floor(mapx / QUAD_SIZE);
@@ -95,9 +130,9 @@ function create_npc(ai, x, y) {
     var at = 0;  //todo: change at to tickcount, less calculations
     var target = null;
     
-    var move = function(map, x, y) {
-        mapx = wrap(mapx + x, MAP_WIDTH);
-        mapy = wrap(mapy + y, MAP_HEIGHT);
+    var move = function(map, dx, dy) {
+        mapx = dx;
+        mapy = dy;
         var newquadx = Math.floor(mapx / QUAD_SIZE);
         var newquady = Math.floor(mapy / QUAD_SIZE);
         
@@ -135,13 +170,16 @@ function create_npc(ai, x, y) {
             var ymove = randint(-1,2);
             
             if (target) {
-                var angle = Math.atan2(mapx - target.get_x(), mapy - target.get_y());
-                console.log(angle);
-                ymove = -Math.round(Math.cos(angle));
-                xmove = -Math.round(Math.sin(angle));
+                var targetx = target.get_x();
+                var targety = target.get_y();
+                var angle = Math.atan2(mapx - targetx, mapy - targety);
+                var direction = (Math.floor((angle*4+Math.PI/2)/Math.PI)+4)&7;  //pinwheel navigation
+                var m = map.get_path(mapx, mapy, direction);
+                xmove = m.x;
+                ymove = m.y;
+                if (Math.abs(targety - mapy) > MAP_HEIGHT / 2) ymove = -ymove;
+                if (Math.abs(targetx - mapx) > MAP_WIDTH / 2) xmove = -xmove;
             }
-            
-            console.log(xmove, ymove);
             
             move(map, xmove, ymove);
             at = 0;
@@ -149,7 +187,7 @@ function create_npc(ai, x, y) {
     };
     
     var to_string = function() {
-        return mapx + ", " + mapy;
+        return NAME + ": " + mapx + ", " + mapy;
     };
     
     return {
@@ -187,9 +225,10 @@ function create_user(client) {
         client.send({"type":type, "data":data}); //use JSON.stringify(data)
     };
     
-    var move = function(map, x, y) {
-        mapx = wrap(mapx + x, map.width);
-        mapy = wrap(mapy + y, map.height);
+    var move = function(map, direction) {
+        var m = map.get_path(mapx, mapy, direction);
+        mapx = m.x;
+        mapy = m.y;
         var newquadx = Math.floor(mapx / QUAD_SIZE);
         var newquady = Math.floor(mapy / QUAD_SIZE);
         
@@ -203,6 +242,10 @@ function create_user(client) {
         } 
     };
     
+    var to_string = function() {
+        return NAME + ": " + mapx + ", " + mapy;
+    };
+    
     return {
         NAME: NAME,
         get_ai: function() { return ai; },
@@ -211,7 +254,8 @@ function create_user(client) {
         get_x: function() { return mapx; },
         get_y: function() { return mapy; },
         client: client,
-        send_message: send_message
+        send_message: send_message,
+        to_string: to_string
     }
 }
 
@@ -259,7 +303,7 @@ function create_server(client) {
         }
     
         if (message.type == "move") {
-            user.move(map, message.data[0], message.data[1]);
+            user.move(map, message.data);
         }
     };
     
