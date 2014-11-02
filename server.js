@@ -39,7 +39,7 @@ function create_map(width, height) {
     for (var x=0;x<width;x++) {
         tile[x] = [];
         for (var y=0;y<height;y++) {
-            tile[x][y] = pick_random([tiletemplates[0],tiletemplates[1]]);
+            tile[x][y] = pick_random([tiletemplates[0],tiletemplates[1], tiletemplates[1]]);
         }
     }
     var quad = [];
@@ -70,26 +70,26 @@ function create_map(width, height) {
         }
     };
     
-    var get_path = function(x, y, direction) {
+    var get_vector = function(x, y, direction) {
         //try moving in three directions according to pinwheel navigation
-        var m = {"x":wrap(x+pathtable[direction][0],width),"y":wrap(y+pathtable[direction][1],height)};
+        
+        var d = pathtable[direction];
+        var m = {"x":wrap(x+d[0],width),"y":wrap(y+d[1],height)};
 
         if (tile[m.x][m.y].blocked) {
-            m.x = wrap(x+pathtable[(direction+1)&7][0],width);
-            m.y = wrap(y+pathtable[(direction+1)&7][1],height);
+            d = pathtable[(direction+1)&7];
+            m = {"x":wrap(x+d[0],width),"y":wrap(y+d[1],height)};
         }
         
         if (tile[m.x][m.y].blocked) {
-            m.x = wrap(x+pathtable[(direction-1)&7][0],width);
-            m.y = wrap(y+pathtable[(direction-1)&7][1],height);
+            d = pathtable[(direction-1)&7];
+            m = {"x":wrap(x+d[0],width),"y":wrap(y+d[1],height)};
         }
         
         if (tile[m.x][m.y].blocked) {
-            m.x = x;
-            m.y = y;
+            d = [0,0];
         }
-        
-        return m; //todo: change to return direction unit vector, not position!
+        return d;
     };
     
     var add = function(index, qx, qy) {
@@ -105,7 +105,7 @@ function create_map(width, height) {
     return {
         add: add,
         remove: remove,
-        get_path: get_path,
+        get_vector: get_vector,
         width: width,
         height: height,
         tile: tile,
@@ -131,8 +131,8 @@ function create_npc(ai, x, y) {
     var target = null;
     
     var move = function(map, dx, dy) {
-        mapx = dx;
-        mapy = dy;
+        mapx = wrap(mapx + dx, MAP_WIDTH);
+        mapy = wrap(mapy + dy, MAP_HEIGHT);
         var newquadx = Math.floor(mapx / QUAD_SIZE);
         var newquady = Math.floor(mapy / QUAD_SIZE);
         
@@ -148,7 +148,7 @@ function create_npc(ai, x, y) {
     
     var turn = function(units, map) {
         at = at + agl;
-        if (at >= 200) {
+        if (at >= 1000) {
             /** possible bottleneck!! **/
         
             var distances = units.filter(function(u) {
@@ -172,13 +172,13 @@ function create_npc(ai, x, y) {
             if (target) {
                 var targetx = target.get_x();
                 var targety = target.get_y();
-                var angle = Math.atan2(mapx - targetx, mapy - targety);
-                var direction = (Math.floor((angle*4+Math.PI/2)/Math.PI)+4)&7;  //pinwheel navigation
-                var m = map.get_path(mapx, mapy, direction);
-                xmove = m.x;
-                ymove = m.y;
-                if (Math.abs(targety - mapy) > MAP_HEIGHT / 2) ymove = -ymove;
+                var angle = Math.atan2(mapy - targety, mapx - targetx);
+                var direction = (Math.floor((angle*4+Math.PI/2)/Math.PI))&7;  //pinwheel navigation
+                var vector = map.get_vector(mapx, mapy, direction);
+                xmove = vector[0];
+                ymove = vector[1];
                 if (Math.abs(targetx - mapx) > MAP_WIDTH / 2) xmove = -xmove;
+                if (Math.abs(targety - mapy) > MAP_HEIGHT / 2) ymove = -ymove;
             }
             
             move(map, xmove, ymove);
@@ -224,11 +224,10 @@ function create_user(client) {
     var send_message = function(type, data) {
         client.send({"type":type, "data":data}); //use JSON.stringify(data)
     };
-    
-    var move = function(map, direction) {
-        var m = map.get_path(mapx, mapy, direction);
-        mapx = m.x;
-        mapy = m.y;
+
+    var move = function(map, dx, dy) {
+        mapx = wrap(mapx + dx, MAP_WIDTH);
+        mapy = wrap(mapy + dy, MAP_HEIGHT);
         var newquadx = Math.floor(mapx / QUAD_SIZE);
         var newquady = Math.floor(mapy / QUAD_SIZE);
         
@@ -303,7 +302,8 @@ function create_server(client) {
         }
     
         if (message.type == "move") {
-            user.move(map, message.data);
+            var vector = map.get_vector(user.get_x(), user.get_y(), message.data);
+            user.move(map, vector[0], vector[1]);
         }
     };
     
