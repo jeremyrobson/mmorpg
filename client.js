@@ -1,14 +1,14 @@
-var cursorX = 0, cursorY = 0;
-var tileX = 0, tileY = 0;
-
-var Bullet = function(x1, y1, x2, y2) {
+var Bullet = function(x1, y1, x2, y2, type) {
     var angle = Math.atan2(x2-x1,y2-y1);
-    this.x = x1;
-    this.y = y1;
-    this.x2 = x2;
-    this.y2 = y2;
-    this.velx = Math.cos(angle);
-    this.vely = Math.sin(angle);
+    this.x = x1*32;
+    this.y = y1*24;
+    this.x2 = x2*32;
+    this.y2 = y2*24;
+    this.velx = Math.cos(angle)*2;
+    this.vely = Math.sin(angle)*2;
+    this.type = type;
+    this.color = "rgb(255,0,0)";
+    console.log(this);
 };
 
 Bullet.prototype.move = function() {
@@ -20,6 +20,11 @@ Bullet.prototype.hit = function() {
     return this.x == this.x2 && this.y == this.y2;
 };
 
+Bullet.prototype.draw = function(ctx) {
+    ctx.fillStyle = this.color;
+    ctx.fillRect(this.x, this.y, 16, 16); //use get_draw_x or y?
+};
+
 function create_client(server) {
     var lasttick = 0;
     var tickcount = 0;
@@ -28,17 +33,21 @@ function create_client(server) {
     var WIDTH = map.width;
     var HEIGHT = map.height;
     var mousepressed = false;
-    var mousex = 0;
-    var mousey = 0;
-    var mapx = 0;
-    var mapy = 0;
+    var mousex, mousey = 0;
+    var cursorX = 0, cursorY = 0;
+    var tileX = 0, tileY = 0;
+    var mapx = 0, mapy = 0;
     var range = 5;
     var units = [];
     var target = null;
     var bullets = [];
     
+    var send_message = function(type, data) {
+        server.send({"type": type, "data": data});
+    };
+    
     var load = function(client) {
-        server.send({"type": "connect", "data": client});
+        send_message("connect", client);
     };
 
     var on_message = function(message) {
@@ -57,6 +66,11 @@ function create_client(server) {
         
         if (message.type == "target") {
             target = units[message.data];
+        }
+        
+        if (message.type == "action") {
+            var action = message.data;
+            bullets.push(new Bullet(action.x1, action.y1, action.x2, action.y2, action.type));
         }
     };
 
@@ -82,12 +96,16 @@ function create_client(server) {
         var vector = get_vector(mapx, mapy, direction);
         
         if (vector[0] != 0 || vector[1] != 0)
-            server.send({"type": "move", "data": direction});
+            send_message("move", direction);
     };
     
     var loop = function() {
         if (tickcount > lasttick + 1000/60) {
             lasttick = tickcount;
+            
+            bullets.forEach(function(b) {
+                b.move();
+            });
             
             if (mousepressed) move();
             draw();
@@ -115,9 +133,7 @@ function create_client(server) {
             return u.x == tileX && u.y == tileY;
         })[0];
 
-        if (selected) {
-            server.send({"type": "target", "data": selected.index});
-        }
+        if (selected) send_message("target", selected.index);
     };
     
     var mouse_up = function(x, y) {
@@ -152,6 +168,10 @@ function create_client(server) {
                 context.fillStyle = u.color;
                 context.fillRect(dx*32+4,dy*24-24,24,32);
             }
+        });
+        
+        bullets.forEach(function(b) {
+            b.draw(context);
         });
         
         context.fillStyle = "rgb(0,255,0)";
