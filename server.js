@@ -1,13 +1,4 @@
-var pathtable = [
-    [-1,0], //w
-    [-1,-1], //nw
-    [0,-1], //n
-    [1,-1], //ne
-    [1,0], //e
-    [1,1], //se
-    [0,1], //s
-    [-1,1] //sw
-];
+var pathtable = [[-1,0],[-1,-1],[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1]];
 
 var tiletemplates = [
     {
@@ -72,24 +63,18 @@ function create_map(width, height) {
     
     var get_vector = function(x, y, direction) {
         //try moving in three directions according to pinwheel navigation
-        
-        var d = pathtable[direction];
-        var m = {"x":wrap(x+d[0],width),"y":wrap(y+d[1],height)};
-
+        var v = pathtable[direction];
+        var m = {"x":wrap(x+v[0],width),"y":wrap(y+v[1],height)};
         if (tile[m.x][m.y].blocked) {
-            d = pathtable[(direction+1)&7];
-            m = {"x":wrap(x+d[0],width),"y":wrap(y+d[1],height)};
+            v = pathtable[(direction+1)&7];
+            m = {"x":wrap(x+v[0],width),"y":wrap(y+v[1],height)};
         }
-        
         if (tile[m.x][m.y].blocked) {
-            d = pathtable[(direction-1)&7];
-            m = {"x":wrap(x+d[0],width),"y":wrap(y+d[1],height)};
+            v = pathtable[(direction-1)&7];
+            m = {"x":wrap(x+v[0],width),"y":wrap(y+v[1],height)};
         }
-        
-        if (tile[m.x][m.y].blocked) {
-            d = [0,0];
-        }
-        return d;
+        if (tile[m.x][m.y].blocked) v = [0,0];
+        return v;
     };
     
     var add = function(index, qx, qy) {
@@ -133,6 +118,7 @@ function create_npc(ai, x, y) {
     var move = function(map, dx, dy) {
         mapx = wrap(mapx + dx, MAP_WIDTH);
         mapy = wrap(mapy + dy, MAP_HEIGHT);
+        
         var newquadx = Math.floor(mapx / QUAD_SIZE);
         var newquady = Math.floor(mapy / QUAD_SIZE);
         
@@ -191,16 +177,16 @@ function create_npc(ai, x, y) {
     };
     
     return {
+        index: index,
         get_ai: function() { return ai; },
-        get_index: function() { return index; },
         color: color,
         get_x: function() { return mapx; },
         get_y: function() { return mapy; },
         get_quad_x: function() { return Math.floor(mapx / QUAD_SIZE); },
         get_quad_y: function() { return Math.floor(mapy / QUAD_SIZE); },
         move: move,
-        to_string: to_string,
-        turn: turn
+        turn: turn,
+        to_string: to_string
     };
 }
 
@@ -215,7 +201,7 @@ function create_user(client) {
     var quady = Math.floor(mapy / QUAD_SIZE);
     var oldquadx = -1;
     var oldquady = -1;
-    var color = "rgb(255,0,0)";
+    var color = "rgb(0,255,255)";
     var hp = 100;
     var agl = randint(3,20);
     var at = 0;
@@ -241,19 +227,39 @@ function create_user(client) {
         } 
     };
     
+    var turn = function(units, map) {
+        at = at + agl;
+        if (at >= 1000) {
+            if (target)
+                console.log(target);
+
+            
+            at = 0;
+        }
+    };
+    
+    var update_units = function(unitdata) {
+        send_message("unitupdate", unitdata);
+        if (target) send_message("target", target.index);
+    };
+    
     var to_string = function() {
         return NAME + ": " + mapx + ", " + mapy;
     };
     
     return {
+        index: index,
         NAME: NAME,
+        color: color,
         get_ai: function() { return ai; },
-        get_index: function() { return index; },
         move: move,
         get_x: function() { return mapx; },
         get_y: function() { return mapy; },
         client: client,
         send_message: send_message,
+        set_target: function(u) { target = u; },
+        turn: turn,
+        update_units: update_units,
         to_string: to_string
     }
 }
@@ -275,8 +281,6 @@ function create_server(client) {
         }
         
         units.filter(function(u) {
-            return u.get_ai() == "hostile";
-        }).forEach(function(u) {
             u.turn(units, map);
         });
     };
@@ -290,7 +294,17 @@ function create_server(client) {
         //.filter(function(u) {
         //    return u.get_index() != unit.get_index();
         //});;
-        unit.send_message("unitupdate", units);
+        var unitdata = [];
+        unitdata = units.map(function(u) {
+            return {
+                "index": u.index,
+                "NAME": u.name,
+                "color": u.color,
+                "x": u.get_x(),
+                "y": u.get_y()
+            };
+        });
+        unit.update_units(unitdata);
         //}
     };
     
@@ -304,6 +318,10 @@ function create_server(client) {
         if (message.type == "move") {
             var vector = map.get_vector(user.get_x(), user.get_y(), message.data);
             user.move(map, vector[0], vector[1]);
+        }
+        
+        if (message.type == "target") {
+            user.set_target(units[message.data]);
         }
     };
     
