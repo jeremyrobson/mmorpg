@@ -23,6 +23,13 @@ Bullet.prototype.hit = function() {
 function create_client(server) {
     var lasttick = 0;
     var tickcount = 0;
+    var map = server.map;
+    var tile = map.tile;
+    var WIDTH = map.width;
+    var HEIGHT = map.height;
+    var mousepressed = false;
+    var mousex = 0;
+    var mousey = 0;
     var mapx = 0;
     var mapy = 0;
     var range = 5;
@@ -47,56 +54,93 @@ function create_client(server) {
         if (message.type == "unitupdate") {
             units = message.data;
         }
+        
+        if (message.type == "target") {
+            target = units[message.data];
+        }
     };
 
+    var get_vector = function(x, y, direction) {
+        //try moving in three directions according to pinwheel navigation
+        var v = pathtable[direction];
+        var m = {"x":wrap(x+v[0],WIDTH),"y":wrap(y+v[1],HEIGHT)};
+        if (tile[m.x][m.y].blocked) {
+            v = pathtable[(direction+1)&7];
+            m = {"x":wrap(x+v[0],WIDTH),"y":wrap(y+v[1],HEIGHT)};
+        }
+        if (tile[m.x][m.y].blocked) {
+            v = pathtable[(direction-1)&7];
+            m = {"x":wrap(x+v[0],WIDTH),"y":wrap(y+v[1],HEIGHT)};
+        }
+        if (tile[m.x][m.y].blocked) v = [0,0];
+        return v;
+    };
+    
+    var move = function() {
+        var angle = Math.atan2(mousey-180, mousex-240);
+        var direction = (Math.floor((angle*4+Math.PI/2)/Math.PI)+4)&7; //pinwheel navigation
+        var vector = get_vector(mapx, mapy, direction);
+        
+        if (vector[0] != 0 || vector[1] != 0)
+            server.send({"type": "move", "data": direction});
+    };
+    
     var loop = function() {
         if (tickcount > lasttick + 1000/60) {
             lasttick = tickcount;
             
+            if (mousepressed) move();
             draw();
         }
         
         tickcount++;
     };
     
+    var mouse_move = function(x, y) {
+        mousex = x;
+        mousey = y;
+    };
+    
     var mouse_down = function(x, y) {
-        var angle = Math.atan2(y-180, x-240);
-        var direction = (Math.floor((angle*4+Math.PI/2)/Math.PI)+4)&7; //pinwheel navigation
-        server.send({"type": "move", "data": direction});
+        mousepressed = true;
+        mouse_move(x, y);
         
         cursorX = Math.floor(x/32);
         cursorY = Math.floor(y/24);
         
-        tileX = wrap(mapx + cursorX - 7, MAP_WIDTH);
-        tileY = wrap(mapy + cursorY - 7, MAP_HEIGHT);
+        tileX = wrap(mapx + cursorX - 7, WIDTH);
+        tileY = wrap(mapy + cursorY - 7, HEIGHT);
         
         var selected = units.filter(function(u) {
-            return u.get_x() == tileX && u.get_y() == tileY;
+            return u.x == tileX && u.y == tileY;
         })[0];
 
         if (selected) {
-            target = selected;
-            console.log(target.to_string());
+            server.send({"type": "target", "data": selected.index});
         }
     };
     
-    var get_draw_x = function(u) { return wrap(u.get_x() - mapx + 7, MAP_WIDTH) };
-    var get_draw_y = function(u) { return wrap(u.get_y() - mapy + 7, MAP_HEIGHT) };
+    var mouse_up = function(x, y) {
+        mousepressed = false;
+    };
+    
+    var get_draw_x = function(u) { return wrap(u.x - mapx + 7, WIDTH) };
+    var get_draw_y = function(u) { return wrap(u.y - mapy + 7, HEIGHT) };
     
     var draw = function() {
         context.fillStyle = "rgb(100,150,225)";
         context.fillRect(0,0,640,480);
         for (var x=0;x<16;x++) {
             for (var y=0;y<16;y++) {
-                var tx = wrap(x + mapx - 7, MAP_WIDTH);
-                var ty = wrap(y + mapy - 7, MAP_HEIGHT);
-                context.fillStyle = server.map.tile[tx][ty].color;
+                var tx = wrap(x + mapx - 7, WIDTH);
+                var ty = wrap(y + mapy - 7, HEIGHT);
+                context.fillStyle = tile[tx][ty].color;
                 context.fillRect(x*32,y*24,31,23);
             }
         }
         
         if (target) {
-            context.fillStyle = "rgba(0,255,255,0.75)";
+            context.fillStyle = "rgba(255,255,0,0.75)";
             context.fillRect(get_draw_x(target)*32, get_draw_y(target)*24, 32, 24);
         }
         
@@ -117,11 +161,13 @@ function create_client(server) {
         context.font = "32px Calibri Bold";
         context.fillText(mapx + ", " + mapy, 20, 20);
     };
-    
+
     return {
         load: load,
         loop: loop,
+        mouse_move: mouse_move,
         mouse_down: mouse_down,
+        mouse_up: mouse_up,
         send: on_message,
         draw: draw
     };
