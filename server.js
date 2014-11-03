@@ -177,7 +177,8 @@ function create_npc(ai, x, y) {
     };
     
     return {
-        index: index,
+        get_index: function() { return index; },
+        set_index: function(i) { index = i; },
         get_ai: function() { return ai; },
         color: color,
         get_x: function() { return mapx; },
@@ -227,12 +228,24 @@ function create_user(client) {
         } 
     };
     
+    var invoke_action = function(targetindex) {
+        send_message("action", targetindex);
+    };
+    
     var turn = function(units, map) {
         at = at + agl;
         if (at >= 1000) {
-            if (target)
-                console.log(target);
-
+            if (target) {
+                invoke_action({
+                    "actor": index,
+                    "target": target.get_index(),
+                    "x1": mapx,
+                    "y1": mapy,
+                    "x2": target.get_x(),
+                    "y2": target.get_y(),
+                    "type": "attack"
+                });
+            }
             
             at = 0;
         }
@@ -240,7 +253,7 @@ function create_user(client) {
     
     var update_units = function(unitdata) {
         send_message("unitupdate", unitdata);
-        if (target) send_message("target", target.index);
+        if (target) send_message("target", target.get_index());
     };
     
     var to_string = function() {
@@ -248,7 +261,8 @@ function create_user(client) {
     };
     
     return {
-        index: index,
+        get_index: function() { return index; },
+        set_index: function(i) { index = i; },
         NAME: NAME,
         color: color,
         get_ai: function() { return ai; },
@@ -270,7 +284,7 @@ function create_server(client) {
     var user;
 
     var add = function(unit) {
-        unit.index = units.push(unit) - 1;
+        unit.set_index(units.push(unit) - 1);
         unit.move(map, unit.get_x(), unit.get_y());
     };
     
@@ -297,7 +311,7 @@ function create_server(client) {
         var unitdata = [];
         unitdata = units.map(function(u) {
             return {
-                "index": u.index,
+                "index": u.get_index(),
                 "NAME": u.name,
                 "color": u.color,
                 "x": u.get_x(),
@@ -330,7 +344,7 @@ function create_server(client) {
         var npc = create_npc("hostile");
         var qx = npc.get_quad_x();
         var qy = npc.get_quad_y();   
-        npc.index = units.push(npc);
+        npc.set_index(units.push(npc) - 1);
     }
     */
     
