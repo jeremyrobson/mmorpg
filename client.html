@@ -18,8 +18,16 @@ window.onload = function() {
     var client = create_client(server);
     client.load(client);
     
+    canvas.onmousemove = function(e) {
+        client.mouse_move(e.offsetX, e.offsetY);
+    };
+    
     canvas.onmousedown = function(e) {
         client.mouse_down(e.offsetX, e.offsetY);
+    };
+    
+    canvas.onmouseup = function(e) {
+        client.mouse_up(e.offsetX, e.offsetY);
     };
     
     interval = window.setInterval(function() { //temporary server loop on client
