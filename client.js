@@ -1,28 +1,31 @@
 var Bullet = function(x1, y1, x2, y2, type) {
-    var angle = Math.atan2(x2-x1,y2-y1);
-    this.x = x1*32;
-    this.y = y1*24;
-    this.x2 = x2*32;
-    this.y2 = y2*24;
-    this.velx = Math.cos(angle)*2;
-    this.vely = Math.sin(angle)*2;
+    var self = this;
+    var angle = Math.atan2(y2-y1, x2-x1);
+    this.x = x1 + 7;
+    this.y = y1 + 7;
+    this.x2 = x2 + 7;
+    this.y2 = y2 + 7;
+    this.velx = Math.round(Math.cos(angle));
+    this.vely = Math.round(Math.sin(angle));
     this.type = type;
     this.color = "rgb(255,0,0)";
-    console.log(this);
+    this.get_draw_x = function(mapx, WIDTH) { return wrap(self.x - mapx, WIDTH) * 32; };
+    this.get_draw_y = function(mapy, HEIGHT) { return wrap(self.y - mapy, HEIGHT) * 24; };
 };
 
 Bullet.prototype.move = function() {
     this.x += this.velx;
     this.y += this.vely;
+    
 };
 
 Bullet.prototype.hit = function() {
-    return this.x == this.x2 && this.y == this.y2;
+    return this.x < this.x2 + 32 && this.y < this.y2 + 24 && this.x + 16 > this.x2 && this.y + 16 > this.y2;
 };
 
-Bullet.prototype.draw = function(ctx) {
+Bullet.prototype.draw = function(ctx, mapx, mapy, WIDTH, HEIGHT) {
     ctx.fillStyle = this.color;
-    ctx.fillRect(this.x, this.y, 16, 16); //use get_draw_x or y?
+    ctx.fillRect(this.get_draw_x(mapx, WIDTH), this.get_draw_y(mapy, HEIGHT), 16, 16);
 };
 
 function create_client(server) {
@@ -69,8 +72,8 @@ function create_client(server) {
         }
         
         if (message.type == "action") {
-            var action = message.data;
-            bullets.push(new Bullet(action.x1, action.y1, action.x2, action.y2, action.type));
+           // var action = message.data;
+            //bullets.push(new Bullet(action.x1, action.y1, action.x2, action.y2, action.type));
         }
     };
 
@@ -171,7 +174,7 @@ function create_client(server) {
         });
         
         bullets.forEach(function(b) {
-            b.draw(context);
+            b.draw(context, mapx, mapy, WIDTH, HEIGHT);
         });
         
         context.fillStyle = "rgb(0,255,0)";
