@@ -27,7 +27,7 @@ window.onload = function() {
     
     interval = window.setInterval(function() { //temporary server loop on client
         server.loop(client);
-        client.loop();
+        client.loop(context);
     }, 10);
 };
 </script>
