@@ -102,7 +102,7 @@ function create_client(server) {
             send_message("move", direction);
     };
     
-    var loop = function() {
+    var loop = function(context) {
         if (tickcount > lasttick + 1000/60) {
             lasttick = tickcount;
             
@@ -111,7 +111,7 @@ function create_client(server) {
             });
             
             if (mousepressed) move();
-            draw();
+            draw(context);
         }
         
         tickcount++;
@@ -146,7 +146,7 @@ function create_client(server) {
     var get_draw_x = function(u) { return wrap(u.x - mapx + 7, WIDTH) };
     var get_draw_y = function(u) { return wrap(u.y - mapy + 7, HEIGHT) };
     
-    var draw = function() {
+    var draw = function(context) {
         context.fillStyle = "rgb(100,150,225)";
         context.fillRect(0,0,640,480);
         for (var x=0;x<16;x++) {
