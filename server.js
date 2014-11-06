@@ -1,5 +1,11 @@
 var pathtable = [[-1,0],[-1,-1],[0,-1],[1,-1],[1,0],[1,1],[0,1],[-1,1]];
 
+function wrap(num, max) {
+    if (num < 0) return max + num;
+    if (num >= max) return num - max;
+    return num;
+}
+
 var tiletemplates = [
     {
         "name": "water",
@@ -94,12 +100,12 @@ function create_map(width, height) {
 
 function to_string(u) {
     return u.NAME + ": " + u.get_x + ", " + u.get_y;
-};
+}
 
-function create_unit(ai, NAME, color, map, x, y) {
+function create_unit(ai, name, color, map, x, y) {
     var index = -1;
     var id = randint(10000, 1000000);
-    var NAME = NAME || "NPC";
+    var NAME = name || "NPC";
     var mapx = x || randint(0, map.width);
     var mapy = y || randint(0, map.height);
     var color = color || "rgb(255,0,0)";
