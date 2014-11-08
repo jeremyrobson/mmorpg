@@ -6,6 +6,14 @@ function wrap(num, max) {
     return num;
 }
 
+function unwrap(num1, num2, max) {
+    if (Math.abs(num2 - num1) > max / 2) {
+        if (num1 > num2) return num1 - max;
+        else return num1 + max;
+    }
+    return num1;
+}
+
 var tiletemplates = [
     {
         "name": "water",
@@ -110,9 +118,27 @@ function create_unit(ai, name, color, map, x, y) {
     var mapy = y || randint(0, map.height);
     var color = color || "rgb(255,0,0)";
     var hp = 100;
-    var agl = randint(3,20);
+    var agl = randint(3,10);
     var at = 0;  //todo: change at to tickcount, less calculations
     var target = null;
+    var targetindex = -1;
+    var actionqueue = [];
+    
+    function loop(units, user) {
+        if (targetindex > -1) {
+            target = units[targetindex];
+        }
+        
+        at += agl;
+        if (at >= 500)
+            turn(units, user);
+    }
+
+    function turn(units, user) {
+        var action = (user) ? get_action() : npc_turn(units);
+        if (action) actionqueue.push(action);
+        at = 0;
+    }
     
     function move(dx, dy) {
         var x = wrap(mapx + dx, map.width);
@@ -123,17 +149,6 @@ function create_unit(ai, name, color, map, x, y) {
             
         mapx = x;
         mapy = y;
-    }
-    
-    function turn(units, map) {
-        at += agl;
-        if (at >= 500) {
-            if (ai == "hostile")
-                npc_turn(units);
-            else
-                if (target) invoke_action();
-            at = 0;
-        }
     }
     
     function npc_turn(units) {
@@ -172,16 +187,24 @@ function create_unit(ai, name, color, map, x, y) {
         move(xmove, ymove);
     }
     
-    function invoke_action() {
-        var action = {
-            "actor": index,
-            "target": target.get_index(),
-            "x1": mapx,
-            "y1": mapy,
-            "x2": target.get_x(),
-            "y2": target.get_y(),
-            "type": "attack"
-        };
+    function get_action() {
+        if (target) {
+            return {
+                "actor": index,
+                "target": target.get_index(),
+                "x1": mapx,
+                "y1": mapy,
+                "x2": target.get_x(),
+                "y2": target.get_y(),
+                "type": "attack"
+            };
+        }
+    }
+
+    function get_unit_data(units) {
+        var unitlist = map.get_units(index);
+        var data = unitlist.map(function(index) { return units[index].to_json(); });
+        return data;
     }
     
     return {
@@ -190,17 +213,19 @@ function create_unit(ai, name, color, map, x, y) {
         get_ai: function() { return ai; },
         color: color,
         get_target: function() { return target; },
-        set_target: function(u) { target = u; console.log(target); },
+        set_target: function(i) { targetindex = i; },
         get_position: function() { return [mapx, mapy]; },
         get_x: function() { return mapx; },
         get_y: function() { return mapy; },
         set_x: function(x) { mapx = x; },
         set_y: function(y) { mapy = y; },
-        get_unit_data: function() { return get_unit_data(index); },
+        get_unit_data: get_unit_data,
+        loop: loop,
         move: move,
         turn: turn,
         to_json: function() { return {"index":index,"NAME":NAME,"color":color,"x":mapx,"y":mapy}; },
-        to_string: function() { return to_string(this); }
+        to_string: function() { return to_string(this); },
+        push_action: function(fn) { if (actionqueue.length > 0) fn("action", actionqueue.shift(0)); }
     };
 }
 
@@ -212,16 +237,23 @@ function create_user(client, map) {
         client.send({"type":type, "data":data}); //use JSON.stringify(data)
     };
     
-    var invoke_action = function(targetindex) {
-        send_message("action", targetindex);
+    var on_message = function(message) {
+        if (message.type == "move") {
+            move(message.data);
+        }
+        
+        if (message.type == "target") {
+            unit.set_target(message.data);
+        }
     };
     
-    var update_units = function(units) {
-        var unitlist = map.get_units(unit.get_index());
-        var data = unitlist.map(function(index) { return units[index].to_json(); });
+    var loop = function(units, user) {
+        send_message("move", unit.get_position());
+        unit.loop(units, user);
+        unit.push_action(send_message);
+        var data = unit.get_unit_data(units);
         send_message("unitupdate", data);
-        var target = unit.get_target();
-        if (target) send_message("target", target.get_index());
+        if (unit.get_target()) send_message("target", unit.get_target().to_json());
     };
     
     var move = function(direction) {
@@ -229,11 +261,13 @@ function create_user(client, map) {
         unit.move(vector[0], vector[1]);
     };
     
+    send_message("sysmessage", "connection successful!");
+    
     return {
         client: client,
         send_message: send_message,
-        set_target: function(u) { unit.set_target(u); },
-        update_units: update_units,
+        on_message: on_message,
+        loop: loop,
         to_string: function() { return to_string(this); },
         get_unit: function() { return unit; },
         set_map: function(newmap) { map = newmap; },
@@ -246,37 +280,30 @@ function create_user(client, map) {
 function create_server(client) {
     var map = create_map(256, 256);
     var units = [];
+    var npcs = [];
     var user;
 
-    var add = function(unit) {
+    var add = function(unit, type) {
         unit.set_index(units.push(unit) - 1);
+        if (type == "npc") npcs.push(unit);
     };
     
     var loop = function() {
-        if (user) {
-            user.send_message("move", user.get_unit().get_position());
-            user.update_units(units);
-        }
+        if (user)
+            user.loop(units, user);
         
-        units.forEach(function(u) {
-            u.turn(units, map);
+        npcs.forEach(function(u) {
+            u.loop(units, null);
         });
     };
     
-    var on_message = function(message) { //todo: arg also contains which user
+    var on_message = function(message) {
         if (message.type == "connect") {
             user = create_user(message.data, map);
-            add(user.get_unit());
-            user.send_message("sysmessage", "connection successful!");
+            add(user.get_unit(), "user");
         }
-    
-        if (message.type == "move") {
-            user.move(message.data);
-        }
-        
-        if (message.type == "target") {
-            user.set_target(units[message.data]);
-        }
+        else
+            user.on_message(message);
     };
     
     /*
@@ -287,7 +314,7 @@ function create_server(client) {
     */
     
     var npc = create_unit("hostile", "NPC", "rgb(255,0,0)", map, 5, 5);
-    add(npc);
+    add(npc, "npc");
     
     return {
         loop: loop,
