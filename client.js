@@ -1,31 +1,10 @@
-var Bullet = function(x1, y1, x2, y2, type) {
-    var self = this;
-    var angle = Math.atan2(y2-y1, x2-x1);
-    this.x = x1 + 7;
-    this.y = y1 + 7;
-    this.x2 = x2 + 7;
-    this.y2 = y2 + 7;
-    this.velx = Math.round(Math.cos(angle));
-    this.vely = Math.round(Math.sin(angle));
-    this.type = type;
-    this.color = "rgb(255,0,0)";
-    this.get_draw_x = function(mapx, WIDTH) { return wrap(self.x - mapx, WIDTH) * 32; };
-    this.get_draw_y = function(mapy, HEIGHT) { return wrap(self.y - mapy, HEIGHT) * 24; };
-};
-
-Bullet.prototype.move = function() {
-    this.x += this.velx;
-    this.y += this.vely;
-    
-};
-
-Bullet.prototype.hit = function() {
-    return this.x < this.x2 + 32 && this.y < this.y2 + 24 && this.x + 16 > this.x2 && this.y + 16 > this.y2;
-};
-
-Bullet.prototype.draw = function(ctx, mapx, mapy, WIDTH, HEIGHT) {
-    ctx.fillStyle = this.color;
-    ctx.fillRect(this.get_draw_x(mapx, WIDTH), this.get_draw_y(mapy, HEIGHT), 16, 16);
+function draw_line(ctx, x1, y1, x2, y2) {
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.strokeStyle = "rgb(255,0,0)";
+    ctx.lineWidth = 15;
+    ctx.stroke();
 };
 
 function create_client(server) {
@@ -68,13 +47,17 @@ function create_client(server) {
         }
         
         if (message.type == "target") {
-            target = units[message.data];
+            target = message.data;
+            if (target)
+                console.log("Target: " + target.x + ", " + target.y);
         }
         
+        /*
         if (message.type == "action") {
-           // var action = message.data;
-            //bullets.push(new Bullet(action.x1, action.y1, action.x2, action.y2, action.type));
+            var action = message.data;
+            bullets.push(new Bullet(action.x1, action.y1, function() { return target; }, action.type));
         }
+        */
     };
 
     var get_vector = function(x, y, direction) {
@@ -103,12 +86,10 @@ function create_client(server) {
     };
     
     var loop = function(context) {
+        //todo: better way of moving on single click
+        
         if (tickcount > lasttick + 1000/60) {
             lasttick = tickcount;
-            
-            bullets.forEach(function(b) {
-                b.move();
-            });
             
             if (mousepressed) move();
             draw(context);
@@ -143,8 +124,8 @@ function create_client(server) {
         mousepressed = false;
     };
     
-    var get_draw_x = function(u) { return wrap(u.x - mapx + 7, WIDTH) };
-    var get_draw_y = function(u) { return wrap(u.y - mapy + 7, HEIGHT) };
+    var get_draw_x = function(n) { return wrap(n - mapx + 7, WIDTH) * 32 };
+    var get_draw_y = function(n) { return wrap(n - mapy  + 7, HEIGHT) * 24 };
     
     var draw = function(context) {
         context.fillStyle = "rgb(100,150,225)";
@@ -159,22 +140,23 @@ function create_client(server) {
         }
         
         if (target) {
+            var dx = get_draw_x(target.x);
+            var dy = get_draw_y(target.y);
             context.fillStyle = "rgba(255,255,0,0.75)";
-            context.fillRect(get_draw_x(target)*32, get_draw_y(target)*24, 32, 24);
+            context.fillRect(dx, dy, 32, 24);
+            var tx = unwrap(target.x, mapx, WIDTH);
+            var ty = unwrap(target.y, mapy, HEIGHT);
+            draw_line(context, 7*32+4, 7*24+4, (tx - mapx + 7)*32, (ty - mapy + 7)*24);
         }
         
         units.forEach(function(u) {
-            var dx = get_draw_x(u);
-            var dy = get_draw_y(u);
+            var dx = get_draw_x(u.x);
+            var dy = get_draw_y(u.y);
             
-            if (dx >= 0 && dy >= 0 && dx < 16 && dy <= 16) {
+            if (dx >= 0 && dy >= 0 && dx < 640 && dy <= 480) {
                 context.fillStyle = u.color;
-                context.fillRect(dx*32+4,dy*24-24,24,32);
+                context.fillRect(dx+4,dy-24,24,32);
             }
-        });
-        
-        bullets.forEach(function(b) {
-            b.draw(context, mapx, mapy, WIDTH, HEIGHT);
         });
         
         context.fillStyle = "rgb(0,255,0)";
